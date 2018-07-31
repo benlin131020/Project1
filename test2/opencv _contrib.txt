@@ -1,0 +1,260 @@
+opencv_aruco340d.lib
+opencv_bgsegm340d.lib
+opencv_bioinspired340d.lib
+opencv_calib3d340d.lib
+opencv_ccalib340d.lib
+opencv_core340d.lib
+opencv_datasets340d.lib
+opencv_dnn340d.lib
+opencv_dpm340d.lib
+opencv_face340d.lib
+opencv_features2d340d.lib
+opencv_flann340d.lib
+opencv_fuzzy340d.lib
+opencv_highgui340d.lib
+opencv_img_hash340d.lib
+opencv_imgcodecs340d.lib
+opencv_imgproc340d.lib
+opencv_line_descriptor340d.lib
+opencv_ml340d.lib
+opencv_objdetect340d.lib
+opencv_optflow340d.lib
+opencv_phase_unwrapping340d.lib
+opencv_photo340d.lib
+opencv_plot340d.lib
+opencv_reg340d.lib
+opencv_rgbd340d.lib
+opencv_saliency340d.lib
+opencv_shape340d.lib
+opencv_stereo340d.lib
+opencv_stitching340d.lib
+opencv_structured_light340d.lib
+opencv_superres340d.lib
+opencv_surface_matching340d.lib
+opencv_text340d.lib
+opencv_tracking340d.lib
+opencv_video340d.lib
+opencv_videoio340d.lib
+opencv_videostab340d.lib
+opencv_xfeatures2d340d.lib
+opencv_ximgproc340d.lib
+opencv_xobjdetect340d.lib
+opencv_xphoto340d.lib
+
+
+// test2.cpp: 定義主控台應用程式的進入點。
+//
+
+#include "stdafx.h"
+#include<opencv2/opencv.hpp>
+#include <opencv2/tracking.hpp>
+#include<iostream>
+using namespace std;
+using namespace cv;
+using namespace cv::ml;
+
+void Preprocess(cv::Mat input_img, cv::Mat &output_img) {
+	//縮減取樣
+	cv::pyrDown(input_img, output_img, cv::Size(input_img.cols / 2, input_img.rows / 2));
+	//cv::pyrDown(output_img, output_img, cv::Size(output_img.cols / 2, output_img.rows / 2));
+	//cv::resize(input_img, output_img, cv::Size(input_img.cols / 2, input_img.rows / 2));
+	//Convert processed_img to YCbCr
+	cv::cvtColor(output_img, output_img, CV_BGR2YCrCb);
+	//splits a multi-channel array into separate single-channel arrays
+	std::vector<cv::Mat> channels;
+	cv::split(output_img, channels);
+	//histogram equalization
+	cv::equalizeHist(channels[0], channels[0]);
+	//Creates one multi-channel array out of several single-channel ones. 
+	cv::merge(channels, output_img);
+	//Convert processed_img to BGR
+	cv::cvtColor(output_img, output_img, CV_YCrCb2BGR);
+}
+
+void Skin_Dec(cv::Mat input_img, cv::Mat &skin_img) {
+	cv::Mat ycbcr_img, canny_img, gb_img, cut_img;
+	//cut
+	cv::Point tl(0, input_img.rows * 2 / 5);
+	cv::Point br(input_img.cols, input_img.rows * 3 / 4);
+	cut_img = input_img(cv::Rect(tl, br));
+	cv::GaussianBlur(cut_img, gb_img, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
+	//Use YCbCr to get skin color
+	cv::cvtColor(gb_img, ycbcr_img, CV_BGR2YCrCb);
+	cv::inRange(ycbcr_img, cv::Scalar(80, 135, 85), cv::Scalar(255, 180, 135), skin_img);
+	//imshow("Skin Color", skin_img);
+	//Get Canny of image
+	cv::Canny(gb_img, canny_img, 50, 150, 3);
+	cv::bitwise_not(canny_img, canny_img);
+	//imshow("Canny", canny_img);
+	//ycbcr_img bitwise_and canny_img
+	cv::bitwise_and(skin_img, canny_img, skin_img);
+	//imshow("and", skin_img);
+	// Floodfill
+	cv::Mat im_floodfill = skin_img.clone();
+	rectangle(im_floodfill, cv::Point(0, 0), cv::Point(im_floodfill.cols, im_floodfill.rows), cv::Scalar(0, 0, 0), 2, 8, 0);
+	cv::floodFill(im_floodfill, cv::Point(0, 0), cv::Scalar(255));
+	cv::bitwise_not(im_floodfill, im_floodfill);
+	skin_img = (skin_img | im_floodfill);
+	//imshow("fill", skin_img);
+	//Opening
+	cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(7, 7));
+	cv::erode(skin_img, skin_img, element);
+	cv::dilate(skin_img, skin_img, element);
+}
+
+bool templateMatching(Mat src, Mat roiImg, Point &tl, Point &br) {
+	Mat result;
+	Mat rotate1, rotate2;
+	//tl
+	matchTemplate(src, roiImg, result, CV_TM_SQDIFF_NORMED);
+	double minVal1;
+	minMaxLoc(result, &minVal1, 0, &tl, 0);
+	//rotate image
+	Point2f pt1(src.cols / 2., src.rows / 2.);
+	Mat r1 = getRotationMatrix2D(pt1, 180, 1.0);
+	warpAffine(src, rotate1, r1, Size(src.cols, src.rows));
+	Point2f pt2(roiImg.cols / 2., roiImg.rows / 2.);
+	Mat r2 = getRotationMatrix2D(pt2, 180, 1.0);
+	warpAffine(roiImg, rotate2, r2, Size(roiImg.cols, roiImg.rows));
+	//br
+	matchTemplate(rotate1, rotate2, result, CV_TM_SQDIFF_NORMED);
+	double minVal2;
+	Point minLoc;
+	minMaxLoc(result, &minVal2, 0, &minLoc, 0);
+	//rotate point
+	cv::Point2f trans_pt = Point2f(minLoc) - pt1;
+	float x = std::cos(CV_PI) * trans_pt.x - std::sin(CV_PI) * trans_pt.y;
+	float y = std::sin(CV_PI) * trans_pt.x + std::cos(CV_PI) * trans_pt.y;
+	cv::Point2f rot_pt(x, y);
+	br = rot_pt + pt1;
+	if ((minVal1 + minVal2) / 2 > 0.1) return false;
+	else true;
+}
+
+void ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv::ml::SVM> svm, vector<Ptr<Tracker>> &trackers, vector<Rect> &rois,vector<Mat> &rois_img) {
+	//cut
+	Mat display = input_img.clone();
+	cv::Point tl(0, input_img.rows * 2 / 5);
+	cv::Point br(input_img.cols, input_img.rows * 3 / 4);
+	//Find contours
+	std::vector<std::vector<cv::Point>> contours;
+	std::vector<cv::Vec4i> hierarchy;
+	cv::findContours(skin_img, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_NONE);
+	std::vector<cv::Rect> boundRect(contours.size());
+	cv::cvtColor(skin_img, skin_img, CV_GRAY2BGR);
+	//tracker
+	//bool ok;
+	//for (size_t i = 0; i < trackers.size(); i++) {
+	//	ok = trackers[i]->update(input_img, rois[i]);
+	//	if (ok) {
+	//		rectangle(display, rois[i], cv::Scalar(0, 255, 0), 2, 8, 0);
+	//	}
+	//	else {
+	//		trackers.erase(trackers.begin() + i);
+	//		rois.erase(rois.begin() + i);
+	//		//waitKey(0);
+	//	}
+	//}
+	for (size_t i = 0; i < rois.size(); i++) {
+		if (rois[i].x - rois[i].width / 2 < 0 || rois[i].y - rois[i].height / 2 < 0 || rois[i].x - rois[i].width / 2 + rois[i].width * 2 > input_img.cols || rois[i].y - rois[i].height / 2 + rois[i].height * 2 > input_img.rows) {
+			rois.erase(rois.begin() + i);
+			rois_img.erase(rois_img.begin() + i);
+			continue;
+		}
+		Mat src = input_img(Rect(rois[i].x - rois[i].width / 2, rois[i].y - rois[i].height / 2, rois[i].width * 2, rois[i].height * 2));
+		Point roi_tl, roi_br;
+		bool match_success;
+		match_success = templateMatching(src, rois_img[i], roi_tl, roi_br);
+		if (!match_success) {
+			rois.erase(rois.begin() + i);
+			rois_img.erase(rois_img.begin() + i);
+			continue;
+		}
+		rectangle(display, Point(roi_tl.x + rois[i].x - rois[i].width / 2, roi_tl.y + rois[i].y - rois[i].height / 2), Point(roi_br.x + rois[i].x - rois[i].width / 2, roi_br.y + rois[i].y - rois[i].height / 2), Scalar(0, 255, 0), 2);
+		rois_img[i] = input_img(Rect(Point(roi_tl.x + rois[i].x - rois[i].width / 2, roi_tl.y + rois[i].y - rois[i].height / 2), Point(roi_br.x + rois[i].x - rois[i].width / 2, roi_br.y + rois[i].y - rois[i].height / 2)));
+		rois[i] = Rect(Point(roi_tl.x + rois[i].x - rois[i].width / 2, roi_tl.y + rois[i].y - rois[i].height / 2), Point(roi_br.x + rois[i].x - rois[i].width / 2, roi_br.y + rois[i].y - rois[i].height / 2));
+	}
+	//Draw Bounding rects
+	for (int i = 0; i < contours.size(); i++) {
+		boundRect[i] = cv::boundingRect(contours[i]);
+		if (//condition of rect's area
+			boundRect[i].area() < 5000 &&
+			boundRect[i].area() > 100 &&
+			//condition of rect's ratio
+			MAX(boundRect[i].height, boundRect[i].width) / MIN(boundRect[i].height, boundRect[i].width) < 2) {
+			/*boundRect[i].x += tl.x;
+			boundRect[i].y += tl.y;
+			boundRect[i].width = MIN(boundRect[i].width, boundRect[i].height);
+			boundRect[i].height = MIN(boundRect[i].width, boundRect[i].height);*/
+			Rect roi_rect(boundRect[i].x + tl.x, boundRect[i].y + tl.y, MIN(boundRect[i].width, boundRect[i].height), MIN(boundRect[i].width, boundRect[i].height));
+			bool overlapped = false;
+			for (size_t i = 0; i < rois.size(); i++) {
+				if ((roi_rect & rois[i]).area() >= MIN(roi_rect.area(), rois[i].area()) / 2) {
+					overlapped = true;
+					break;
+				}
+			}
+			if (overlapped)continue;
+			std::vector<float> descriptors;
+			cv::Mat src = input_img(roi_rect);
+			cv::resize(src, src, cv::Size(32, 32));
+			hog.compute(src, descriptors);
+			float response = svm->predict(descriptors);
+			if (response == 1 || response == 2) {
+				rectangle(display, roi_rect, cv::Scalar(255, 0, 0), 2, 8, 0);
+				//trackers.push_back(TrackerKCF::create());
+				rois.push_back(roi_rect);
+				//trackers.back()->init(input_img, rois.back());
+				rois_img.push_back(input_img(rois.back()));
+			}
+			//else rectangle(display, roi_rect, cv::Scalar(0, 0, 255), 2, 8, 0);
+		}
+		/*drawContours(skin_img, contours, i, cv::Scalar(255, 0, 0), 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point());
+		rectangle(skin_img, boundRect[i], cv::Scalar(0, 0, 255), 2, 8, 0);*/
+	}
+
+	//cv::imshow("ROI_binary", skin_img);
+	cv::imshow("ROI", display);
+}
+
+int main()
+{
+	VideoCapture video("test_video.mp4");
+	Mat original_img, processed_img, skin_img;
+
+	cv::HOGDescriptor hog(
+		cv::Size(32, 32), //winSize
+		cv::Size(16, 16), //blocksize
+		cv::Size(8, 8), //blockStride,
+		cv::Size(8, 8), //cellSize,
+		9 //nbins,
+	);
+	//Set up SVM
+	cv::Ptr<cv::ml::SVM> svm = cv::Algorithm::load<cv::ml::SVM>("testNT.yml");
+
+	vector<Ptr<Tracker>> trackers;
+	vector<Rect> rois;
+	vector<Mat> rois_img;
+	
+	while (true) {
+		video >> original_img;
+
+		//影片結束或按下esc跳出
+		if (original_img.empty()) {
+			break;
+		}
+		Preprocess(original_img, processed_img);
+		Skin_Dec(processed_img, skin_img);
+		
+		//imshow("Original Image", processed_img);
+		ROI(processed_img.clone(), skin_img, hog, svm, trackers, rois, rois_img);
+
+		//cv::imshow("Original", original_img);
+		//cv::imshow("Final", processed_img);
+
+		cv::waitKey(1);
+	}
+
+    return 0;
+}
+
