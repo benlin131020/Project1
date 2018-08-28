@@ -21,12 +21,18 @@
     <ClInclude Include="targetver.h">
       <Filter>標頭檔</Filter>
     </ClInclude>
+    <ClInclude Include="functions.h">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
     <ClCompile Include="test2.cpp">
+      <Filter>來源檔案</Filter>
+    </ClCompile>
+    <ClCompile Include="functions.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
   </ItemGroup>
