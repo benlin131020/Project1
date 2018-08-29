@@ -4,9 +4,9 @@ using namespace std;
 using namespace cv;
 using namespace cv::ml;
 
-void Preprocess(cv::Mat input_img, cv::Mat &output_img) {
+void Preprocess(cv::Mat input_img, cv::Mat &output_img, cv::Point tl, cv::Point br) {
 	//ÁY´î¨ú¼Ë
-	cv::pyrDown(input_img, output_img, cv::Size(input_img.cols / 2, input_img.rows / 2));
+	output_img = input_img(cv::Rect(tl, br));
 	//Convert processed_img to YCbCr
 	cv::cvtColor(output_img, output_img, CV_BGR2YCrCb);
 	//splits a multi-channel array into separate single-channel arrays
@@ -23,37 +23,37 @@ void Preprocess(cv::Mat input_img, cv::Mat &output_img) {
 	cv::cvtColor(output_img, output_img, CV_YCrCb2BGR);
 }
 
-void Skin_Dec(cv::Mat input_img, cv::Mat &skin_img) {
-	cv::Mat ycbcr_img, canny_img, gb_img, cut_img;
-	//cut
-	cv::Point tl(0, input_img.rows * 2 / 5);
-	cv::Point br(input_img.cols, input_img.rows * 3 / 4);
-	cut_img = input_img(cv::Rect(tl, br));
+void Skin_Det(cv::Mat input_img, cv::Mat &skin_img) {
+	cv::Mat ycbcr_img, canny_img, gb_img;
 	//gaussianblur
-	cv::GaussianBlur(cut_img, gb_img, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
+	cv::GaussianBlur(input_img, gb_img, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
 	//Use YCbCr to get skin color
 	cv::cvtColor(gb_img, ycbcr_img, CV_BGR2YCrCb);
 	cv::inRange(ycbcr_img, cv::Scalar(80, 135, 85), cv::Scalar(255, 180, 135), skin_img);
+	/*
 	//Get Canny of image
 	cv::Canny(gb_img, canny_img, 50, 150, 3);
 	cv::bitwise_not(canny_img, canny_img);
 	//ycbcr_img bitwise_and canny_img
 	cv::bitwise_and(skin_img, canny_img, skin_img);
+	*/
 	// Floodfill
 	cv::Mat im_floodfill = skin_img.clone();
 	rectangle(im_floodfill, cv::Point(0, 0), cv::Point(im_floodfill.cols, im_floodfill.rows), cv::Scalar(0, 0, 0), 2, 8, 0);
 	cv::floodFill(im_floodfill, cv::Point(0, 0), cv::Scalar(255));
 	cv::bitwise_not(im_floodfill, im_floodfill);
 	skin_img = (skin_img | im_floodfill);
+	/*
 	//Opening
 	cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(7, 7));
 	cv::erode(skin_img, skin_img, element);
 	cv::dilate(skin_img, skin_img, element);
-	/*
+	
 	imshow("Skin Color", skin_img);
 	imshow("Canny", canny_img);
 	imshow("and", skin_img);
 	imshow("fill", skin_img);
+	imshow("opening", skin_img);
 	*/
 }
 
@@ -116,10 +116,7 @@ void tracking(cv::Mat input_img, vector<Rect> &rois, vector<Mat> &rois_img, cv::
 }
 
 void ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv::ml::SVM> svm, vector<Rect> &rois, vector<Mat> &rois_img) {
-	//cut
 	Mat display = input_img.clone();
-	cv::Point tl(0, input_img.rows * 2 / 5);
-	cv::Point br(input_img.cols, input_img.rows * 3 / 4);
 	//Find contours
 	std::vector<std::vector<cv::Point>> contours;
 	std::vector<cv::Vec4i> hierarchy;
@@ -132,11 +129,12 @@ void ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv:
 	for (int i = 0; i < contours.size(); i++) {
 		boundRect[i] = cv::boundingRect(contours[i]);
 		if (//condition of rect's area
-			boundRect[i].area() < 5000 &&
-			boundRect[i].area() > 100 &&
+			//boundRect[i].area() < 5000 &&
+			boundRect[i].area() > 256 &&
 			//condition of rect's ratio
 			MAX(boundRect[i].height, boundRect[i].width) / MIN(boundRect[i].height, boundRect[i].width) < 2) {
-				Rect roi_rect(boundRect[i].x + tl.x, boundRect[i].y + tl.y, MIN(boundRect[i].width, boundRect[i].height), MIN(boundRect[i].width, boundRect[i].height));
+				//normalization
+				Rect roi_rect(boundRect[i].x, boundRect[i].y, MIN(boundRect[i].width, boundRect[i].height), MIN(boundRect[i].width, boundRect[i].height));
 				//delete overlapped area
 				bool overlapped = false;
 				for (size_t i = 0; i < rois.size(); i++) {
@@ -159,10 +157,10 @@ void ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv:
 				}
 				//else rectangle(display, roi_rect, cv::Scalar(0, 0, 255), 2, 8, 0);
 		}
-		/*drawContours(skin_img, contours, i, cv::Scalar(255, 0, 0), 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point());
-		rectangle(skin_img, boundRect[i], cv::Scalar(0, 0, 255), 2, 8, 0);*/
+		//drawContours(skin_img, contours, i, cv::Scalar(255, 0, 0), 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point());
+		//rectangle(skin_img, boundRect[i], cv::Scalar(0, 0, 255), 2, 8, 0);
 	}
 
-	//cv::imshow("ROI_binary", skin_img);
+	cv::imshow("ROI_binary", skin_img);
 	cv::imshow("ROI", display);
 }
