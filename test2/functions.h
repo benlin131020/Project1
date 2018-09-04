@@ -4,6 +4,8 @@
 
 #include<opencv2/opencv.hpp>
 
+#define SVM_SIZE 32
+
 using namespace std;
 using namespace cv;
 using namespace cv::ml;

@@ -1,4 +1,5 @@
 #include<opencv2/opencv.hpp>
+#include"functions.h"
 
 using namespace std;
 using namespace cv;
@@ -43,18 +44,18 @@ void Skin_Det(cv::Mat input_img, cv::Mat &skin_img) {
 	cv::floodFill(im_floodfill, cv::Point(0, 0), cv::Scalar(255));
 	cv::bitwise_not(im_floodfill, im_floodfill);
 	skin_img = (skin_img | im_floodfill);
-	/*
+	
 	//Opening
 	cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(7, 7));
 	cv::erode(skin_img, skin_img, element);
 	cv::dilate(skin_img, skin_img, element);
 	
-	imshow("Skin Color", skin_img);
-	imshow("Canny", canny_img);
-	imshow("and", skin_img);
-	imshow("fill", skin_img);
-	imshow("opening", skin_img);
-	*/
+	//imshow("Skin Color", skin_img);
+	//imshow("Canny", canny_img);
+	//imshow("and", skin_img);
+	//imshow("fill", skin_img);
+	//imshow("opening", skin_img);
+	
 }
 
 bool templateMatching(Mat src, Mat roiImg, Point &roi_tl, Point &roi_br) {
@@ -147,7 +148,7 @@ void ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv:
 				//svm
 				std::vector<float> descriptors;
 				cv::Mat src = input_img(roi_rect);
-				cv::resize(src, src, cv::Size(32, 32));
+				cv::resize(src, src, cv::Size(SVM_SIZE, SVM_SIZE));
 				hog.compute(src, descriptors);
 				float response = svm->predict(descriptors);
 				if (response == 1) {
