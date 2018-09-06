@@ -17,45 +17,69 @@ void Preprocess(cv::Mat input_img, cv::Mat &output_img, cv::Point tl, cv::Point 
 	Ptr<CLAHE> clahe = createCLAHE();
 	clahe->setClipLimit(2);
 	clahe->apply(channels[0], channels[0]);
-	//cv::equalizeHist(channels[0], channels[0]);
 	//Creates one multi-channel array out of several single-channel ones. 
 	cv::merge(channels, output_img);
 	//Convert processed_img to BGR
 	cv::cvtColor(output_img, output_img, CV_YCrCb2BGR);
 }
 
+bool rule_bgr(int R, int G, int B) {
+	bool e1 = (R > 95) && (G > 40) && (B > 20) && ((max(R, max(G, B)) - min(R, min(G, B))) > 15) && (abs(R - G) > 15) && (R > G) && (R > B);
+	bool e2 = (R > 220) && (G > 210) && (B > 170) && (abs(R - G) <= 15) && (R > B) && (G > B);
+	return (e1 || e2);
+}
+
+bool rule_ycrcb(float Y, float Cr, float Cb) {
+	bool e3 = Cr <= 1.5862*Cb + 20;
+	bool e4 = Cr >= 0.3448*Cb + 76.2069;
+	bool e5 = Cr >= -4.5652*Cb + 234.5652;
+	bool e6 = Cr <= -1.15*Cb + 301.75;
+	bool e7 = Cr <= -2.2857*Cb + 432.85;
+	return e3 && e4 && e5 && e6 && e7;
+}
+
+bool rule_hsv(float H, float S, float V) {
+	return (H < 25) || (H > 230);
+}
+
 void Skin_Det(cv::Mat input_img, cv::Mat &skin_img) {
-	cv::Mat ycbcr_img, canny_img, gb_img;
-	//gaussianblur
-	cv::GaussianBlur(input_img, gb_img, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
-	//Use YCbCr to get skin color
-	cv::cvtColor(gb_img, ycbcr_img, CV_BGR2YCrCb);
-	cv::inRange(ycbcr_img, cv::Scalar(80, 135, 85), cv::Scalar(255, 180, 135), skin_img);
-	/*
-	//Get Canny of image
-	cv::Canny(gb_img, canny_img, 50, 150, 3);
-	cv::bitwise_not(canny_img, canny_img);
-	//ycbcr_img bitwise_and canny_img
-	cv::bitwise_and(skin_img, canny_img, skin_img);
-	*/
+	cv::Mat ycrcb_img, hsv_img, canny_img, gb_img;
+	//get skin color
+	cv::cvtColor(input_img, ycrcb_img, CV_BGR2YCrCb);
+	cv::cvtColor(input_img, hsv_img, CV_BGR2HSV);
+	skin_img = input_img.clone();
+	cvtColor(skin_img, skin_img, CV_BGR2GRAY);
+	for (int i = 0; i < input_img.rows; i++) {
+		for (int j = 0; j < input_img.cols; j++) {
+			Vec3b ycrcb_pixel = ycrcb_img.at<Vec3b>(i, j);
+			int y = ycrcb_pixel[0];
+			int cr = ycrcb_pixel[1];
+			int cb = ycrcb_pixel[2];
+			bool ycrcb_bool = rule_ycrcb(y, cr, cb);
+			Vec3b hsv_pixel = hsv_img.at<Vec3b>(i, j);
+			int h = hsv_pixel[0];
+			int s = hsv_pixel[1];
+			int v = hsv_pixel[2];
+			bool hsv_bool = rule_hsv(h, s, v);
+			Vec3b bgr_pixel = input_img.at<Vec3b>(i, j);
+			int b = bgr_pixel[0];
+			int g = bgr_pixel[1];
+			int r = bgr_pixel[2];
+			bool bgr_bool = rule_bgr(r, g, b);
+			if (!(ycrcb_bool&&hsv_bool&&bgr_bool)) skin_img.at<uchar>(i, j) = 0;
+			else skin_img.at<uchar>(i, j) = 255;
+		}
+	}
 	// Floodfill
 	cv::Mat im_floodfill = skin_img.clone();
 	rectangle(im_floodfill, cv::Point(0, 0), cv::Point(im_floodfill.cols, im_floodfill.rows), cv::Scalar(0, 0, 0), 2, 8, 0);
 	cv::floodFill(im_floodfill, cv::Point(0, 0), cv::Scalar(255));
 	cv::bitwise_not(im_floodfill, im_floodfill);
 	skin_img = (skin_img | im_floodfill);
-	
 	//Opening
 	cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(7, 7));
 	cv::erode(skin_img, skin_img, element);
 	cv::dilate(skin_img, skin_img, element);
-	
-	//imshow("Skin Color", skin_img);
-	//imshow("Canny", canny_img);
-	//imshow("and", skin_img);
-	//imshow("fill", skin_img);
-	//imshow("opening", skin_img);
-	
 }
 
 bool templateMatching(Mat src, Mat roiImg, Point &roi_tl, Point &roi_br) {
@@ -144,6 +168,7 @@ void ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv:
 						break;
 					}
 				}
+
 				if (overlapped)continue;
 				//svm
 				std::vector<float> descriptors;
@@ -156,7 +181,7 @@ void ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv:
 					rois.push_back(roi_rect);
 					rois_img.push_back(input_img(rois.back()));
 				}
-				//else rectangle(display, roi_rect, cv::Scalar(0, 0, 255), 2, 8, 0);
+				else rectangle(skin_img, roi_rect, cv::Scalar(0, 0, 255), 2, 8, 0);
 		}
 		//drawContours(skin_img, contours, i, cv::Scalar(255, 0, 0), 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point());
 		//rectangle(skin_img, boundRect[i], cv::Scalar(0, 0, 255), 2, 8, 0);
