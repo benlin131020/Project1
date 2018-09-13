@@ -70,16 +70,12 @@ void Skin_Det(cv::Mat input_img, cv::Mat &skin_img) {
 			else skin_img.at<uchar>(i, j) = 255;
 		}
 	}
-	// Floodfill
-	cv::Mat im_floodfill = skin_img.clone();
-	rectangle(im_floodfill, cv::Point(0, 0), cv::Point(im_floodfill.cols, im_floodfill.rows), cv::Scalar(0, 0, 0), 2, 8, 0);
-	cv::floodFill(im_floodfill, cv::Point(0, 0), cv::Scalar(255));
-	cv::bitwise_not(im_floodfill, im_floodfill);
-	skin_img = (skin_img | im_floodfill);
+	imshow("skin_color", skin_img);
 	//Opening
 	cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(7, 7));
 	cv::erode(skin_img, skin_img, element);
 	cv::dilate(skin_img, skin_img, element);
+	imshow("opening", skin_img);
 }
 
 bool templateMatching(Mat src, Mat roiImg, Point &roi_tl, Point &roi_br) {
@@ -140,7 +136,7 @@ void tracking(cv::Mat input_img, vector<Rect> &rois, vector<Mat> &rois_img, cv::
 	}
 }
 
-void ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv::ml::SVM> svm, vector<Rect> &rois, vector<Mat> &rois_img) {
+Mat ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv::ml::SVM> svm, vector<Rect> &rois, vector<Mat> &rois_img) {
 	Mat display = input_img.clone();
 	//Find contours
 	std::vector<std::vector<cv::Point>> contours;
@@ -157,7 +153,8 @@ void ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv:
 			//boundRect[i].area() < 5000 &&
 			boundRect[i].area() > 256 &&
 			//condition of rect's ratio
-			MAX(boundRect[i].height, boundRect[i].width) / MIN(boundRect[i].height, boundRect[i].width) < 2) {
+			//((boundRect[i].width / boundRect[i].height) <= 0.4 || (boundRect[i].height / boundRect[i].width) <= 0.7)
+			MAX(boundRect[i].height, boundRect[i].width) / MIN(boundRect[i].height, boundRect[i].width) < 1.5) {
 				//normalization
 				Rect roi_rect(boundRect[i].x, boundRect[i].y, MIN(boundRect[i].width, boundRect[i].height), MIN(boundRect[i].width, boundRect[i].height));
 				//delete overlapped area
@@ -187,6 +184,7 @@ void ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv:
 		//rectangle(skin_img, boundRect[i], cv::Scalar(0, 0, 255), 2, 8, 0);
 	}
 
-	cv::imshow("ROI_binary", skin_img);
-	cv::imshow("ROI", display);
+	cv::imshow("ROI", skin_img);
+	cv::imshow("result", display);
+	return display;
 }
