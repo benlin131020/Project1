@@ -165,7 +165,6 @@ Mat ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv::
 						break;
 					}
 				}
-
 				if (overlapped)continue;
 				//svm
 				std::vector<float> descriptors;
@@ -178,7 +177,7 @@ Mat ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv::
 					rois.push_back(roi_rect);
 					rois_img.push_back(input_img(rois.back()));
 				}
-				else rectangle(skin_img, roi_rect, cv::Scalar(0, 0, 255), 2, 8, 0);
+				else rectangle(display, roi_rect, cv::Scalar(0, 0, 255), 2, 8, 0);
 		}
 		//drawContours(skin_img, contours, i, cv::Scalar(255, 0, 0), 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point());
 		//rectangle(skin_img, boundRect[i], cv::Scalar(0, 0, 255), 2, 8, 0);
