@@ -167,6 +167,13 @@
     </ClCompile>
     <ClCompile Include="test2.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="GoPro_shoulder_003.avi" />
+    <None Include="testNT.yml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Media Include="test_video1.mp4" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

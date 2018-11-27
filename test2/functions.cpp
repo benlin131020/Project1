@@ -138,7 +138,8 @@ void tracking(cv::Mat input_img, vector<Rect> &rois, vector<Mat> &rois_img, cv::
 
 Mat ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv::ml::SVM> svm, vector<Rect> &rois, vector<Mat> &rois_img) {
 	Mat display = input_img.clone();
-	//Find contours
+	Mat roi_display = input_img.clone();
+	//Find contourst
 	std::vector<std::vector<cv::Point>> contours;
 	std::vector<cv::Vec4i> hierarchy;
 	cv::findContours(skin_img, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_NONE);
@@ -155,35 +156,36 @@ Mat ROI(cv::Mat input_img, cv::Mat skin_img, cv::HOGDescriptor hog, cv::Ptr<cv::
 			//condition of rect's ratio
 			//((boundRect[i].width / boundRect[i].height) <= 0.4 || (boundRect[i].height / boundRect[i].width) <= 0.7)
 			MAX(boundRect[i].height, boundRect[i].width) / MIN(boundRect[i].height, boundRect[i].width) < 1.5) {
-				//normalization
-				Rect roi_rect(boundRect[i].x, boundRect[i].y, MIN(boundRect[i].width, boundRect[i].height), MIN(boundRect[i].width, boundRect[i].height));
-				//delete overlapped area
-				bool overlapped = false;
-				for (size_t i = 0; i < rois.size(); i++) {
-					if ((roi_rect & rois[i]).area() >= MIN(roi_rect.area(), rois[i].area()) / 2) {
-						overlapped = true;
-						break;
-					}
+			rectangle(roi_display, boundRect[i], cv::Scalar(0, 0, 255), 2, 8, 0);
+			//normalization
+			Rect roi_rect(boundRect[i].x, boundRect[i].y, MIN(boundRect[i].width, boundRect[i].height), MIN(boundRect[i].width, boundRect[i].height));
+			//delete overlapped area
+			bool overlapped = false;
+			for (size_t i = 0; i < rois.size(); i++) {
+				if ((roi_rect & rois[i]).area() >= MIN(roi_rect.area(), rois[i].area()) / 2) {
+					overlapped = true;
+					break;
 				}
-				if (overlapped)continue;
-				//svm
-				std::vector<float> descriptors;
-				cv::Mat src = input_img(roi_rect);
-				cv::resize(src, src, cv::Size(SVM_SIZE, SVM_SIZE));
-				hog.compute(src, descriptors);
-				float response = svm->predict(descriptors);
-				if (response == 1) {
-					rectangle(display, roi_rect, cv::Scalar(255, 0, 0), 2, 8, 0);
-					rois.push_back(roi_rect);
-					rois_img.push_back(input_img(rois.back()));
-				}
-				else rectangle(display, roi_rect, cv::Scalar(0, 0, 255), 2, 8, 0);
+			}
+			if (overlapped)continue;
+			//svm
+			std::vector<float> descriptors;
+			cv::Mat src = input_img(roi_rect);
+			cv::resize(src, src, cv::Size(SVM_SIZE, SVM_SIZE));
+			hog.compute(src, descriptors);
+			float response = svm->predict(descriptors);
+			if (response == 1) {
+				rectangle(display, roi_rect, cv::Scalar(255, 0, 0), 2, 8, 0);
+				rois.push_back(roi_rect);
+				rois_img.push_back(input_img(rois.back()));
+			}
+			else rectangle(display, roi_rect, cv::Scalar(0, 0, 255), 2, 8, 0);
 		}
 		//drawContours(skin_img, contours, i, cv::Scalar(255, 0, 0), 1, 8, std::vector<cv::Vec4i>(), 0, cv::Point());
 		//rectangle(skin_img, boundRect[i], cv::Scalar(0, 0, 255), 2, 8, 0);
 	}
 
-	cv::imshow("ROI", skin_img);
 	cv::imshow("result", display);
+	imshow("ROI", roi_display);
 	return display;
 }
